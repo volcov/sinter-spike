@@ -1,0 +1,49 @@
+# Goes in the throwaway repo as .github/workflows/spike.yml.
+#
+# The "flaky" job fails on attempt 1 and passes on attempt 2, so every PR run
+# gives a predictable rerun story. "after-flaky" depends on it, to see that
+# rerun-failed-jobs reruns dependents too. "stable" always passes, to see it
+# is NOT rerun. The sleep keeps attempt 2 running long enough to try a second
+# rerun request while one is in progress.
+name: spike
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  flaky:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Context
+        run: |
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "PR_HEAD_SHA=${{ github.event.pull_request.head.sha }}"
+          echo "GITHUB_RUN_ID=$GITHUB_RUN_ID"
+          echo "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT"
+          echo "GITHUB_HEAD_REF=$GITHUB_HEAD_REF"
+          echo "GITHUB_REF=$GITHUB_REF"
+      - name: Slow enough to race a second rerun
+        run: sleep 90
+      - name: Flaky test
+        run: |
+          if [ "$GITHUB_RUN_ATTEMPT" -lt 2 ]; then
+            echo "simulated flaky failure on attempt $GITHUB_RUN_ATTEMPT"
+            exit 1
+          fi
+          echo "passed on attempt $GITHUB_RUN_ATTEMPT"
+      - name: Upload time (stands in for the Temper push)
+        if: always()
+        run: date -u +%Y-%m-%dT%H:%M:%SZ
+
+  after-flaky:
+    needs: flaky
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "dependent of flaky, attempt $GITHUB_RUN_ATTEMPT"
+
+  stable:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "stable, attempt $GITHUB_RUN_ATTEMPT"
